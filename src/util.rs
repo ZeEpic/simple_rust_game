@@ -121,7 +121,7 @@ pub fn spawn_score_notification(
             TextStyle {
                 font: fonts.score_notification.clone(),
                 font_size: 24.0,
-                color: color(if positive { "5bd972" } else { "d96a5d" }),
+                color: color(if positive { "5bd972" } else { "ff2414" }),
             },
         ))
         .insert(Temporary {
@@ -171,4 +171,22 @@ pub fn spawn_circle(
     if rand_range(0.0, 15.0) < 1.0 {
         spawn_circle(commands, texture, windows, clickable);
     }
+}
+
+fn distance_to_point(transform: &Transform, point: Vec2) -> f32 {
+    transform.translation.truncate().distance(point)
+}
+
+pub fn find_circles_near(
+    circles: Query<(Entity, &Transform), (With<Shrinking>, With<Clickable>)>,
+    point: Vec2,
+    margin_of_error: f32,
+) -> Vec<Entity> {
+    circles
+        .iter()
+        .filter(|(_, transform)| {
+            distance_to_point(transform, point) < (transform.scale.x * margin_of_error * 100.0)
+        })
+        .map(|(entity, _)| entity)
+        .collect::<Vec<Entity>>()
 }

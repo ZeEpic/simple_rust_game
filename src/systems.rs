@@ -1,16 +1,17 @@
 use crate::util::*;
-use crate::Difficulty::Easy;
+use crate::Difficulty::{Easy, Hard};
 use crate::GameState::{GameOver, Loading, Play};
 use crate::{
-    find_circles_near, Clickable, Difficulty, Fonts, Game, GameState, MainMenuTimer, Menu,
-    Shrinking, Temporary, Textures, HOVERED_BUTTON, NORMAL_BUTTON,
+    find_circles_near, Clickable, Difficulty, Fonts, Game, GameState, GameTimer, Menu, Shrinking,
+    Temporary, Textures, HOVERED_BUTTON, NORMAL_BUTTON,
 };
 use bevy::prelude::*;
+use std::time::Duration;
 
 pub fn game_over_system(
     mut commands: Commands,
     circles: Query<(Entity, &mut Transform, &Shrinking)>,
-    timer: Res<MainMenuTimer>,
+    timer: ResMut<GameTimer>,
     score: ResMut<Game>,
     mut fonts: Res<Fonts>,
     mut game_state: ResMut<State<GameState>>,
@@ -27,6 +28,7 @@ pub fn game_over_system(
             150.0,
             65.0,
         );
+        let score = &format!("Score: {}", score.score.to_string());
         commands
             .spawn_bundle(NodeBundle {
                 style: Style {
@@ -42,11 +44,7 @@ pub fn game_over_system(
             })
             .with_children(|parent| {
                 parent.spawn_bundle(get_game_over_text(&mut fonts, 104.0, "Game Over!"));
-                parent.spawn_bundle(get_game_over_text(
-                    &mut fonts,
-                    56.0,
-                    &format!("Score: {}", score.score.to_string()),
-                ));
+                parent.spawn_bundle(get_game_over_text(&mut fonts, 56.0, score));
                 parent
                     .spawn_bundle(button.0)
                     .with_children(|button_parent| {
@@ -92,6 +90,8 @@ pub fn loading_system(
     textures: Res<Textures>,
     mut windows: Res<Windows>,
     query: Query<Entity, With<Menu>>,
+    mut timer: ResMut<GameTimer>,
+    game: ResMut<Game>,
 ) {
     if *game_state.current() != Loading {
         return;
@@ -99,6 +99,13 @@ pub fn loading_system(
     let len = query.iter().count();
     if len == 0 {
         game_state.set(Play).unwrap();
+        // timer
+        //     .0
+        //     .set_duration(Duration::from_secs(match game.difficulty {
+        //         Easy(time) => time,
+        //         Hard(time) => time,
+        //     } as u64));
+        timer.0.reset();
         spawn_circle(&mut commands, textures.circle.clone(), &mut windows, true);
     } else {
         query.for_each(|entity| commands.entity(entity).despawn());
@@ -178,7 +185,7 @@ pub fn setup_resources(mut commands: Commands, asset_server: Res<AssetServer>) {
 pub fn main_menu_circles_system(
     mut commands: Commands,
     mut windows: Res<Windows>,
-    mut timer: ResMut<MainMenuTimer>,
+    mut timer: ResMut<GameTimer>,
     textures: Res<Textures>,
     circles: Query<&Shrinking>,
     time: Res<Time>,
@@ -216,7 +223,7 @@ pub fn temporary_un_alive_system(
 fn load_game(
     game: &mut ResMut<Game>,
     game_state: &mut ResMut<State<GameState>>,
-    timer: &mut ResMut<MainMenuTimer>,
+    timer: &mut ResMut<GameTimer>,
     difficulty: Difficulty,
 ) {
     timer.0.set_repeating(false);
@@ -226,56 +233,70 @@ fn load_game(
 }
 
 pub fn button_system(
+    mut commands: Commands,
     mut interaction_query: Query<
         (&Interaction, &mut UiColor, &Children),
         (Changed<Interaction>, With<Button>),
     >,
     text_query: Query<&Text>,
+    everything: Query<Entity>,
     mut game: ResMut<Game>,
     mut game_state: ResMut<State<GameState>>,
-    mut timer: ResMut<MainMenuTimer>,
+    mut timer: ResMut<GameTimer>,
+    asset_server: Res<AssetServer>,
 ) {
-    for (interaction, mut color, children) in interaction_query.iter_mut() {
-        match *interaction {
-            Interaction::Clicked => {
-                let text = text_query.get(children[0]).unwrap();
-                match &*text.sections[0].value {
-                    "15 Seconds Easy" => load_game(
-                        &mut game,
-                        &mut game_state,
-                        &mut timer,
-                        Difficulty::Easy(15.0),
-                    ),
-                    "30 Seconds Easy" => load_game(
-                        &mut game,
-                        &mut game_state,
-                        &mut timer,
-                        Difficulty::Easy(30.0),
-                    ),
-                    "15 Seconds Hard" => load_game(
-                        &mut game,
-                        &mut game_state,
-                        &mut timer,
-                        Difficulty::Hard(15.0),
-                    ),
-                    "30 Seconds Hard" => load_game(
-                        &mut game,
-                        &mut game_state,
-                        &mut timer,
-                        Difficulty::Hard(30.0),
-                    ),
-                    "Restart" => println!("Restarting..."),
-                    _ => {}
+    let (interaction, mut color, children) = match interaction_query.get_single_mut() {
+        Ok(thing) => thing,
+        Err(_) => return
+    };
+    let _ = match *interaction {
+        Interaction::Clicked => {
+            let text = text_query.get(children[0]).unwrap();
+            match &*text.sections[0].value {
+                "15 Seconds Easy" => load_game(
+                    &mut game,
+                    &mut game_state,
+                    &mut timer,
+                    Difficulty::Easy(15.0),
+                ),
+                "30 Seconds Easy" => load_game(
+                    &mut game,
+                    &mut game_state,
+                    &mut timer,
+                    Difficulty::Easy(30.0),
+                ),
+                "15 Seconds Hard" => load_game(
+                    &mut game,
+                    &mut game_state,
+                    &mut timer,
+                    Difficulty::Hard(15.0),
+                ),
+                "30 Seconds Hard" => load_game(
+                    &mut game,
+                    &mut game_state,
+                    &mut timer,
+                    Difficulty::Hard(30.0),
+                ),
+                "Restart" => {
+                    game_state.set(GameState::MainMenu).unwrap();
+                    everything
+                        .iter()
+                        .for_each(|entity| commands.entity(entity).despawn());
+                    timer.0.reset();
+                    timer.0.set_repeating(true);
+                    timer.0.set_duration(Duration::from_secs_f32(0.4));
+                    setup_resources(commands, asset_server);
                 }
-            }
-            Interaction::Hovered => {
-                *color = HOVERED_BUTTON.into();
-            }
-            Interaction::None => {
-                *color = NORMAL_BUTTON.into();
-            }
+                _ => {}
+            };
         }
-    }
+        Interaction::Hovered => {
+            *color = HOVERED_BUTTON.into();
+        }
+        Interaction::None => {
+            *color = NORMAL_BUTTON.into();
+        }
+    };
 }
 
 pub fn mouse_click_system(
@@ -295,8 +316,8 @@ pub fn mouse_click_system(
         let window = windows.get_primary().expect("No window was found.");
         let cursor = real_mouse_pos(window);
         let error = match game.difficulty.clone() {
-            Difficulty::Easy(_) => 100.0,
-            Difficulty::Hard(_) => 50.0,
+            Difficulty::Easy(_) => 1.0,
+            Difficulty::Hard(_) => 0.5,
         };
         let result = find_circles_near(circles, cursor, error);
         match result.get(0) {

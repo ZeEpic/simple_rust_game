@@ -50,28 +50,14 @@ pub struct Temporary {
     alive: bool,
 }
 
-pub struct MainMenuTimer(Timer);
+pub struct GameTimer(Timer);
 
 const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
 const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 
-fn find_circles_near(
-    circles: Query<(Entity, &Transform), (With<Shrinking>, With<Clickable>)>,
-    point: Vec2,
-    margin_of_error: f32,
-) -> Vec<Entity> {
-    circles
-        .iter()
-        .filter(|(_, transform)| {
-            transform.translation.truncate().distance(point) < (transform.scale.x * margin_of_error)
-        })
-        .map(|(entity, _)| entity)
-        .collect::<Vec<Entity>>()
-}
-
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_resources)
+        app .add_startup_system(setup_resources)
             .add_system(main_menu_circles_system)
             .add_system(game_over_system)
             .add_system(mouse_click_system)
@@ -82,7 +68,7 @@ impl Plugin for GamePlugin {
             .add_system(temporary_un_alive_system)
             .add_state(GameState::MainMenu)
             .insert_resource(ClearColor(color("5c8bd6")))
-            .insert_resource(MainMenuTimer(Timer::from_seconds(0.4, true)));
+            .insert_resource(GameTimer(Timer::from_seconds(0.4, true)));
     }
 }
 
